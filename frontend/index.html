@@ -1,0 +1,357 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blockchain Voting System</title>
+
+    <!-- Ethers.js library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+
+        body {
+            background: #f1f5f9;
+            color: #1e293b;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 750px;
+            margin: auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #64748b;
+            margin-bottom: 30px;
+        }
+
+        .wallet-section, .candidate, .results {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 18px;
+            box-shadow: 0 3px 12px #0000000d;
+        }
+
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 11px 18px;
+            border-radius: 7px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        button:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        .candidate {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+        }
+
+        .candidate h3 {
+            margin-bottom: 7px;
+        }
+
+        .votes {
+            color: #64748b;
+            font-size: 14px;
+        }
+
+        #status {
+            margin-top: 15px;
+            overflow-wrap: anywhere;
+            font-size: 14px;
+            color: #475569;
+        }
+
+        .results {
+            text-align: center;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        #walletAddress {
+            margin-top: 12px;
+            font-size: 13px;
+            overflow-wrap: anywhere;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>Blockchain Voting System</h1>
+    <p class="subtitle">Secure and transparent decentralized voting</p>
+
+    <div class="wallet-section">
+        <h3>Connect Your Wallet</h3>
+        <br>
+        <button id="connectBtn" onclick="connectWallet()">
+            Connect MetaMask
+        </button>
+        <p id="walletAddress"></p>
+        <p id="status">Please connect your wallet.</p>
+    </div>
+
+    <div id="votingSection" class="hidden">
+
+        <h2 style="margin-bottom: 15px;">Available Candidates</h2>
+
+        <div id="candidateList"></div>
+
+        <div class="results">
+            <h3>Voting Results</h3>
+            <p id="totalVotes">Total Votes: 0</p>
+            <br>
+            <button onclick="loadCandidates()">Refresh Results</button>
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+
+    // Replace this with your FULL contract address from Remix
+    const contractAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+
+    // Smart contract ABI
+    const contractABI = [
+        "function getCandidateCount() view returns (uint256)",
+        "function getCandidate(uint256 candidateId) view returns (uint256 id, string name, uint256 voteCount)",
+        "function hasVoted(address voter) view returns (bool)",
+        "function vote(uint256 candidateId)",
+        "event VoteCast(address indexed voter, uint256 indexed candidateId, string candidateName)"
+    ];
+
+    let provider;
+    let signer;
+    let contract;
+    let currentAccount;
+
+    const HARDHAT_CHAIN_ID = 31337n;
+
+    // Connect MetaMask
+    async function connectWallet() {
+
+        try {
+
+            if (!window.ethereum) {
+                throw new Error("Please install MetaMask first.");
+            }
+
+            provider = new ethers.BrowserProvider(window.ethereum);
+
+            await provider.send("eth_requestAccounts", []);
+
+            signer = await provider.getSigner();
+
+            currentAccount = await signer.getAddress();
+
+            const network = await provider.getNetwork();
+
+            if (network.chainId !== HARDHAT_CHAIN_ID) {
+                throw new Error("Please select Hardhat Local network in MetaMask.");
+            }
+
+            if (
+                !ethers.isAddress(contractAddress) ||
+                contractAddress === "PASTE_YOUR_CONTRACT_ADDRESS_HERE"
+            ) {
+                throw new Error("Please enter your deployed contract address in index.html.");
+            }
+
+            contract = new ethers.Contract(
+                contractAddress,
+                contractABI,
+                signer
+            );
+
+            document.getElementById("walletAddress").innerText =
+                "Connected Account: " + currentAccount;
+
+            document.getElementById("connectBtn").innerText =
+                "Wallet Connected";
+
+            document.getElementById("votingSection").classList.remove("hidden");
+
+            showStatus("Wallet connected successfully!");
+
+            await loadCandidates();
+
+        } catch (error) {
+
+            showStatus(error.shortMessage || error.message);
+
+        }
+
+    }
+
+    // Load candidates from blockchain
+    async function loadCandidates() {
+
+        try {
+
+            if (!contract) return;
+
+            const count = await contract.getCandidateCount();
+
+            const list = document.getElementById("candidateList");
+
+            list.innerHTML = "";
+
+            let total = 0n;
+
+            const alreadyVoted = await contract.hasVoted(currentAccount);
+
+            for (let i = 1; i <= Number(count); i++) {
+
+                const candidate = await contract.getCandidate(i);
+
+                const id = Number(candidate.id);
+                const name = candidate.name;
+                const votes = candidate.voteCount;
+
+                total += votes;
+
+                const div = document.createElement("div");
+
+                div.className = "candidate";
+
+                const details = document.createElement("div");
+
+                const heading = document.createElement("h3");
+                heading.textContent = name;
+
+                const voteText = document.createElement("p");
+                voteText.className = "votes";
+                voteText.textContent = "Votes: " + votes.toString();
+
+                details.appendChild(heading);
+                details.appendChild(voteText);
+
+                const button = document.createElement("button");
+
+                button.textContent = alreadyVoted ? "Already Voted" : "Vote";
+
+                button.disabled = alreadyVoted;
+
+                button.addEventListener("click", () => castVote(id));
+
+                div.appendChild(details);
+                div.appendChild(button);
+
+                list.appendChild(div);
+
+            }
+
+            document.getElementById("totalVotes").innerText =
+                "Total Votes: " + total.toString();
+
+        } catch (error) {
+
+            showStatus(error.shortMessage || error.message);
+
+        }
+
+    }
+
+    // Cast vote
+    async function castVote(candidateId) {
+
+        try {
+
+            if (!contract) {
+                throw new Error("Connect your wallet first.");
+            }
+
+            const alreadyVoted = await contract.hasVoted(currentAccount);
+
+            if (alreadyVoted) {
+                throw new Error("You have already voted!");
+            }
+
+            showStatus("Please confirm the transaction in MetaMask.");
+
+            const tx = await contract.vote(candidateId);
+
+            showStatus("Transaction submitted. Waiting for confirmation...");
+
+            document.getElementById("status").innerText +=
+                "\nTransaction Hash: " + tx.hash;
+
+            const receipt = await tx.wait();
+
+            showStatus(
+                "Vote successful! Transaction confirmed.\n" +
+                "Transaction Hash: " + tx.hash +
+                "\nGas Used: " + receipt.gasUsed.toString()
+            );
+
+            await loadCandidates();
+
+        } catch (error) {
+
+            showStatus(error.shortMessage || error.reason || error.message);
+
+        }
+
+    }
+
+    // Display status
+    function showStatus(message) {
+
+        document.getElementById("status").innerText = message;
+
+    }
+
+    // Detect account changes
+    if (window.ethereum) {
+
+        window.ethereum.on("accountsChanged", async () => {
+
+            location.reload();
+
+        });
+
+        window.ethereum.on("chainChanged", () => {
+
+            location.reload();
+
+        });
+
+    }
+
+</script>
+
+</body>
+</html>
