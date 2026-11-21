@@ -286,8 +286,3 @@ Through these projects, I learned:
 
 ---
 
-## Author
-
-Developed as part of a Blockchain Technology practical assignment.
-
-**Technologies:** Solidity | Remix IDE | MetaMask | Hardhat | Ethers.js
